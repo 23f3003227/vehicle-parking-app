@@ -7,7 +7,7 @@ import os # Provides functions for interacting with the operating system.
 app = Flask(__name__) # Initializes the Flask web application.
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY','a_very_secret_key') # Sets a secret key for the Flask application.
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db' # Configures the database URI (Uniform Resource Identifier) for SQLAlchemy.
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'site.db') # Configures the database URI (Uniform Resource Identifier) for SQLAlchemy.
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Disables SQLAlchemy's event system for tracking modifications.
 
 db=SQLAlchemy(app) # Initializes the database connection with the Flask app.
