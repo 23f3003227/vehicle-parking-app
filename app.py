@@ -29,7 +29,11 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(255), nullable=False)
     fullname = db.Column(db.String(120))
     address = db.Column(db.String(200))
-    pin_code = db.Column(db.Integer)
+    pin_code = db.Column(db.String(10))
+
+    reservations = db.relationship('Reservation', backref='reserving_user',cascade='all, delete-orphan',lazy=True)
+
+    user_occupied_spot = db.relationship('ParkingSpot', backref='occupied_by_user', uselist=False, foreign_keys='ParkingSpot.user_id',lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -37,6 +41,9 @@ class User(db.Model, UserMixin):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
+    def get_id(self):
+        return str(self.id)
+
     def __repr__(self):
         return f"User('{self.email_id}', '{self.fullname}')"
 
@@ -46,7 +53,7 @@ class Admin(db.Model, UserMixin):
     password_hash = db.Column(db.String(255), nullable=False)
     fullname = db.Column(db.String(120))
     address = db.Column(db.String(200))
-    pin_code = db.Column(db.Integer)
+    pin_code = db.Column(db.String(10))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -54,9 +61,38 @@ class Admin(db.Model, UserMixin):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
+    def get_id(self):
+        return str(self.id)
+
     def __repr__(self):
         return f"Admin('{self.email_id}', '{self.fullname}')"
+
+class ParkingLot(db.Model):
+    id = db.Column(db.Integer,primary_key=True)
+    prime_location_name = db.Column(db.String(120),nullable=False,unique=True)
+    price_per_unit_time = db.Column(db.Float,nullable=False)
+    address = db.Column(db.String(200),nullable=False)
+    pin_code = db.Column(db.String(10),nullable=False)
+    maximum_number_of_spots = db.Column(db.Integer,nullable=False)
+
+    spots = db.relationship('ParkingSpot',backref = 'parking_lot', lazy = True, cascade = 'all, delete-orphan')
+
+    def __repr__(self):
+        return f"ParkingLot('{self.prime_location_name}','{self.address}',Capacity: {self.maximum_number_of_spots})"   
     
+class ParkingSpot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    lot_id = db.Column(db.Integer, db.ForeignKey('parking_lot.id'), nullable=False)
+    spot_number = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='available')
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    reservations = db.relationship('Reservation', backref='parking_spot', lazy=True, cascade='all, delete-orphan')
+
+    
+    def __repr__(self):
+        return f"ParkingSpot(Lot: {self.lot_id}, Spot: {self.spot_number}, Status: {self.status}, User: {self.user_id})"
 
 @app.route('/')
 def home():
@@ -81,7 +117,7 @@ def register():
         existing_user=User.query.filter_by(email_id=email).first()
         existing_admin=Admin.query.filter_by(email_id=email).first()
 
-        if existing_admin or existing_admin:
+        if existing_user or existing_admin:
             flash('That email is already registered. Please use a different email or log in')
             return render_template('register.html', email=email,fullname=fullname,address=address,pin_code=pin_code)
         else:
@@ -96,6 +132,7 @@ def register():
                 flash(f'An error occured during registration. Please try again. ({e})','danger')
                 return render_template('register.html',email=email,fullname=fullname,address=address,pin_code=pin_code)
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET','POST'])
 def login():
@@ -158,27 +195,80 @@ def admin_dashboard():
         return redirect(url_for('user_dashboard'))
     return render_template('admin_dashboard')
 
+@app.route('/admin/parking_lot/create', methods = ['GET','POST'])
+@login_required
+def create_parking_lot():
+    if not isinstance(current_user, Admin):
+        flash('You must be administrator to access this page.','danger')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+
+        prime_location = request.form['prime_location_name']
+        price = float(request.form['price_per_unit_time'])
+        address = request.form['address']
+        pin_code = request.form['pin_code']
+        maximum_no_of_spots = int(request.form['maximum_number_of_spots'])
+
+        try: 
+
+            existing_lot = ParkingLot.query.filter_by(prime_location_name=prime_location).first()
+
+            if existing_lot:
+                flash('A parking lot with this location name already exists.','warning')
+
+                return render_template('create_parking_lot.html',
+                 prime_location_name=prime_location,
+                 price_per_unit_time=price,
+                 address=address,
+                 pin_code=pin_code,
+                 maximum_number_of_spots=maximum_no_of_spots)
+            
+            parking_lot = ParkingLot(prime_location_name=prime_location,price_per_unit_time=price,address=address,pin_code=pin_code,maximum_number_of_spots=maximum_no_of_spots)
+            db.session.add(parking_lot)
+            db.session.commit()
+
+            #Creating Spots
+            for i in range(1,maximum_no_of_spots+1):
+                spot = ParkingSpot(lot_id=parking_lot.id,spot_number=i,status='available')
+                db.session.add(spot)
+            db.session.commit()
+            flash('Parking lot created successfully!', 'success')
+            return redirect(url_for('admin_dashboard'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An Error occured : {e}','danger')
+            return render_template('create_parking_lot.html',
+                 prime_location_name=prime_location,
+                 price_per_unit_time=price,
+                 address=address,
+                 pin_code=pin_code,
+                 maximum_number_of_spots=maximum_no_of_spots)
+    return render_template('create_parking_lot.html')
+
+
 # Database intialisation & admin seeding/ creation.
 def create_db_and_seed_admin():
     with app.app_context():
+        db.drop_all()
         db.create_all()
         print("Database tables created.")
 
-        # Seed predifined admin if not exists
+        # Seed predefined admin if not exists
         if not Admin.query.filter_by(email_id='admin@example.com').first():
-            #Use the specified fields for the admin
+            # Use the specified fields for the admin
             admin_user = Admin(
-                email_id='admin@example.com',
-                fullname='System Admin',
-                address='Admin HQ, Haryana',
-                pin_code=411019
+                email_id='admin@example.com', # Standard admin email
+                fullname='System Administrator',
+                address='Admin HQ, 123 Main St',
+                pin_code='110001' # Pin code as String
             )
-            admin_user.set_password('superadminpass')# hashed password for the admin
+            admin_user.set_password('superadminpass') # Stronger default password for admin! CHANGE THIS IN PRODUCTION!
             db.session.add(admin_user)
             db.session.commit()
-            print('Predefined admin user created: admin@example.com / superadminpass')
+            print("Predefined admin user created: admin@example.com / superadminpass")
         else:
-            print('Admin user already exists.')
+            print("Admin user already exists.")
 # Run the Application
 if __name__=='__main__':
     create_db_and_seed_admin()
