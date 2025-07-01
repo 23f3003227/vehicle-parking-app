@@ -246,6 +246,52 @@ def create_parking_lot():
                  maximum_number_of_spots=maximum_no_of_spots)
     return render_template('create_parking_lot.html')
 
+@app.route('/admin/parking_lot/edit/<int:lot_id>', methods=['GET','POST'])
+@login_required
+def edit_parking_lot(lot_id):
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('user_dashboard'))
+    
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+
+    if request.method == 'POST':
+        try:
+            original_max_spots = parking_lot.maximum_number_of_spots
+
+            parking_lot.prime_location_name = request.form['prime_location_name']
+            parking_lot.price_per_unit_time = float(request.form['price_per_unit_time'])
+            parking_lot.address = request.form['address']
+            parking_lot.pin_code = request.form['pin_code']
+            parking_lot.maximum_number_of_spots = int(request.form['maximum_number_of_spots'])
+
+            db.session.commit()
+
+            new_max_spots = parking_lot.maximum_number_of_spots
+            if new_max_spots > original_max_spots:
+                for i in range(original_max_spots + 1, new_max_spots + 1):
+                    spot = ParkingSpot(lot_id=parking_lot.id, spot_number=i, status='available')
+                    db.session.add(spot)
+                flash(f'Added {new_max_spots - original_max_spots} new parking spots','info')
+            elif new_max_spots < original_max_spots:
+                spots_to_delete = ParkingSpot.query.filter_by(lot_id=parking_lot.id).filter(ParkingSpot.spot_number>new_max_spots).all()
+
+                for spot in spots_to_delete:
+                    if spot.status in ['occupied','reserved']:
+                        flash(f'Warning: Spot {spot.spot_number} was {spot.status} and will be deleted. Ensure no active reservations/occupancies on deleted spots.','warning')
+                    db.session.delete(spot)
+                flash(f'Removed {original_max_spots - new_max_spots} parking spots.','info')
+            
+            db.session.commit()
+
+            flash('Parking lot updated successfully!','success')
+            return redirect(url_for('admin_dashboard'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred during parking lot update: {e}','danger')
+    return render_template('edit_parking_lot.html',parking_lot=parking_lot)
+
+
 
 # Database intialisation & admin seeding/ creation.
 def create_db_and_seed_admin():
