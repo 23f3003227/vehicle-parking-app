@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Parking Spots for {{ parking_lot.prime_location_name }}{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">Parking Spots for {{ parking_lot.prime_location_name }} (ID: {{ parking_lot.id }})</h1>
+    <p>Total Capacity: {{ parking_lot.maximum_number_of_spots }}</p>
+
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mb-3">Back to Admin Dashboard</a>
+
+    {% if spots_data %}
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Spot ID</th>
+                        <th>Spot Number</th>
+                        <th>Status</th>
+                        <th>Occupied By (User Email)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for spot in spots_data %}
+                        <tr>
+                            <td>{{ spot.spot_id }}</td>
+                            <td>{{ spot.spot_number }}</td>
+                            <td>
+                                {% if spot.status == 'available' %}
+                                    <span class="badge bg-success">{{ spot.status | title }}</span>
+                                {% elif spot.status == 'occupied' %}
+                                    <span class="badge bg-danger">{{ spot.status | title }}</span>
+                                {% elif spot.status == 'reserved' %}
+                                    <span class="badge bg-warning text-dark">{{ spot.status | title }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ spot.status | title }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ spot.occupied_by }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No parking spots found for this lot.</p>
+    {% endif %}
+{% endblock %}

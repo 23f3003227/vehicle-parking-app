@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy # Database ORM for Flask.
 from flask_login import LoginManager, UserMixin, login_user, current_user, logout_user, login_required # Handles user session management and authentication.
 from werkzeug.security import generate_password_hash, check_password_hash # For secure password hashing
 import os # Provides functions for interacting with the operating system.
+import datetime
 
 app = Flask(__name__) # Initializes the Flask web application.
 
@@ -93,6 +94,18 @@ class ParkingSpot(db.Model):
     
     def __repr__(self):
         return f"ParkingSpot(Lot: {self.lot_id}, Spot: {self.spot_number}, Status: {self.status}, User: {self.user_id})"
+    
+class Reservation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    spot_id = db.Column(db.Integer, db.ForeignKey('parking_spot.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    parking_timestamp = db.Column(db.DateTime,nullable=False, default=datetime.datetime.utcnow)
+    leaving_timestamp = db.Column(db.DateTime, nullable=True)
+    parking_cost_per_unit_time = db.Column(db.Float, nullable=False)
+
+    def __repr__(self):
+        return f"Reservation(User: {self.user_id}, Spot: {self.spot_id}, Start: {self.parking_timestamp.strftime('%Y-%m-%d %H:%M')}, End: {self.leaving_timestamp.strftime('%Y-%m-%d %H:%M') if self.leaving_timestamp else 'N/A'})"
+    
 
 @app.route('/')
 def home():
@@ -169,7 +182,7 @@ def login():
         
         else:
             flash('Login Failed. Check email or password','danger')
-            return render_template('login.html')
+            return render_template('login.html',email=email )
     return render_template('login.html')
 
 @app.route('/logout')
@@ -190,10 +203,35 @@ def user_dashboard():
 @app.route('/admin_dashboard')
 @login_required
 def admin_dashboard():
-    if not isinstance(current_user,Admin):
-        flash('You must be an admin to access this page','danger')
+    if not isinstance(current_user, Admin):
+        flash('You must be administrator to access this page.','danger')
         return redirect(url_for('user_dashboard'))
-    return render_template('admin_dashboard')
+    
+    #Quering the Parking Lot DataBase
+    parking_lots = ParkingLot.query.all()
+
+    # Lot summary/status
+    lot_summaries = []
+    for lot in parking_lots:
+        total_spots_created = len(lot.spots)
+        occupied_spots = len([s for s in lot.spots if s.status == 'occupied'])
+        available_spots = len([s for s in lot.spots if s.status == 'available'])
+        reserved_spots = len([s for s in lot.spots if s.status == 'reserved'])
+
+        lot_summaries.append({
+            'lot': lot.id,
+            'prime_location_name': lot.prime_location_name,
+            'address': lot.address,
+            'maximum_number_of_spots': lot.maximum_number_of_spots,
+            'total_spots_created': total_spots_created,
+            'occupied_spots': occupied_spots,
+            'available_spots': available_spots,
+            'reserved_spots': reserved_spots,
+            'price_per_unit_time': lot.price_per_unit_time,
+            'pin_code': lot.pin_code
+        })
+    
+    return render_template('admin_dashboard.html',lot_summaries=lot_summaries)
 
 @app.route('/admin/parking_lot/create', methods = ['GET','POST'])
 @login_required
@@ -291,6 +329,51 @@ def edit_parking_lot(lot_id):
             flash(f'An error occurred during parking lot update: {e}','danger')
     return render_template('edit_parking_lot.html',parking_lot=parking_lot)
 
+
+@app.route('/admin/parking_lot/delete/<int:lot_id>', methods=['GET','POST'])
+@login_required
+def delete_parking_lot(lot_id):
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('user_dashboard'))
+    
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+
+    try:
+        db.session.delete(parking_lot)
+        db.session.commit()
+        flash(f'Parking lot "{parking_lot.prime_location_name}" and all its spots and reservations have been deleted successfully','success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'An error occured during parking lot deletion: {e}','danger')
+
+
+@app.route('/admin/parking_lot/<int:lot_id>/spots')
+@login_required
+def view_parking_spots(lot_id):
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('user_dashboard'))
+
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+    parking_spots = ParkingSpot.query.filter_by(lot_id=lot_id).order_by(ParkingSpot.spot_number.asc()).all()
+
+    spots_data = []
+    for spot in parking_spots:
+        user_email='N/A'
+        if spot.user_id:
+            if spot.occupied_by_user:
+                user_email = spot.occupied_by_user.email_id
+            else:
+                user_email = 'User not found'
+
+        spots_data.append({
+            'spot_id':spot.id,
+            'spot_number':spot.spot_number,
+            'status':spot.status,
+            'occupied_by':user_email
+        })
+    return render_template('view_parking_spot.html',parking_lot=parking_lot,spots_data=spots_data)
 
 
 # Database intialisation & admin seeding/ creation.

@@ -1,16 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <h2>Welcome to the User Dashboard!</h2>
-    <p>If you see this, the user login and redirection worked.</p>
-    <br>
-    <a href="/home">Go to Home</a>
-    <a href="/logout">Logout</a>
+{% extends "base.html" %}
 
-</body>
-</html>
+{% block title %}User Dashboard{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">User Dashboard</h1>
+    <p>Welcome, {{current_user.fullname}}!</p>
+    <p>More Features to add , stay updated.</p>
+{% endblock %}
