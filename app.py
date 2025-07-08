@@ -219,7 +219,7 @@ def admin_dashboard():
         reserved_spots = len([s for s in lot.spots if s.status == 'reserved'])
 
         lot_summaries.append({
-            'lot': lot.id,
+            'lot_id': lot.id,
             'prime_location_name': lot.prime_location_name,
             'address': lot.address,
             'maximum_number_of_spots': lot.maximum_number_of_spots,
@@ -330,7 +330,7 @@ def edit_parking_lot(lot_id):
     return render_template('edit_parking_lot.html',parking_lot=parking_lot)
 
 
-@app.route('/admin/parking_lot/delete/<int:lot_id>', methods=['GET','POST'])
+@app.route('/admin/parking_lot/delete/<int:lot_id>', methods=['POST'])
 @login_required
 def delete_parking_lot(lot_id):
     if not isinstance(current_user, Admin):
@@ -347,10 +347,14 @@ def delete_parking_lot(lot_id):
         db.session.rollback()
         flash(f'An error occured during parking lot deletion: {e}','danger')
 
+    # Ensure a redirect happens even if an exception occurs
+    return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/parking_lot/<int:lot_id>/spots')
+
+
+@app.route('/admin/parking_lot/<int:lot_id>/spot')
 @login_required
-def view_parking_spots(lot_id):
+def view_parking_spot(lot_id):
     if not isinstance(current_user, Admin):
         flash('You must be an administrator to access this page.','danger')
         return redirect(url_for('user_dashboard'))
