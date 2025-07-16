@@ -18,11 +18,20 @@ login_manager.login_view = 'login' # Tells Flask-Login which view function (rout
 login_manager.login_message_category = 'info' # Sets the message category for the default "Please log in to access this page."
 
 @login_manager.user_loader
-def load_user(user_id):
-    user=User.query.get(int(user_id))
-    if user:
-        return user
-    return Admin.query.get(int(user_id))
+def load_user(user_id_str):
+    if '_' in user_id_str:
+        user_type, user_id = user_id_str.split('_',1)
+        try:
+            user_id=int(user_id)
+        except ValueError:
+            return None
+        
+        if user_type == 'user':
+            return User.query.get(user_id)
+        elif user_type == 'admin':
+            return Admin.query.get(user_id)
+    return None
+
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -43,7 +52,7 @@ class User(db.Model, UserMixin):
         return check_password_hash(self.password_hash, password)
     
     def get_id(self):
-        return str(self.id)
+        return f"user_{self.id}"
 
     def __repr__(self):
         return f"User('{self.email_id}', '{self.fullname}')"
@@ -63,7 +72,7 @@ class Admin(db.Model, UserMixin):
         return check_password_hash(self.password_hash, password)
     
     def get_id(self):
-        return str(self.id)
+        return f"admin_{self.id}"
 
     def __repr__(self):
         return f"Admin('{self.email_id}', '{self.fullname}')"
@@ -199,6 +208,210 @@ def user_dashboard():
         flash('Admin cannot access user dashboard directly','danger')
         return redirect(url_for('admin_dashboard'))
     return render_template('user_dashboard.html')
+
+@app.route('/user/parking_lots')
+@login_required
+def user_view_parking_lots():
+    if isinstance(current_user,Admin):
+        flash('Admin cannot access user dashboard directly.','danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    parking_lots = ParkingLot.query.all()
+
+    parking_lot_data = []
+    for lot in parking_lots:
+        # Count available spots for each lot
+        available_spots_count = ParkingSpot.query.filter_by(lot_id=lot.id, status='available').count()
+        total_spots_count = len(lot.spots) # Total spots created for this lot
+
+        parking_lot_data.append({
+            'lot_id': lot.id,
+            'prime_location_name': lot.prime_location_name,
+            'address': lot.address,
+            'pin_code': lot.pin_code,
+            'price_per_unit_time': lot.price_per_unit_time,
+            'total_capacity': lot.maximum_number_of_spots,
+            'total_spots_created': total_spots_count,
+            'available_spots': available_spots_count
+        })
+
+    return render_template('user_view_parking_lots.html', parking_lot_data=parking_lot_data)
+
+@app.route('/user/reserve_spot/<int:lot_id>', methods=['POST'])
+@login_required
+def reserve_spot(lot_id):
+    if isinstance(current_user, Admin):
+        flash('Admins cannot reserve spots.','danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    existing_occupied_spot = ParkingSpot.query.filter_by(user_id=current_user.id, status='occupied').first()
+    existing_reserved_spot = ParkingSpot.query.filter_by(user_id=current_user.id, status='reserved').first()
+
+    if existing_occupied_spot:
+        flash(f'You currently occupy spot {existing_occupied_spot.spot_number} in {existing_occupied_spot.parking_lot.prime_location_name}. Please release it first.','warning')
+        return redirect(url_for('user_dashboard'))
+    
+    if existing_reserved_spot:
+        flash(f'You already have spot {existing_reserved_spot.spot_number} in {existing_reserved_spot.parking_lot.prime_location_name} reserved. Please occupy or release it','warning')
+        return redirect(url_for('user_dashboard'))
+    
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+
+    available_spot = ParkingSpot.query.filter_by(lot_id=lot_id, status='available').order_by(ParkingSpot.spot_number.asc()).first()
+
+    if available_spot:
+        try:
+            available_spot.status = 'reserved'
+            available_spot.user_id = current_user.id
+
+            new_reservation = Reservation(
+                spot_id=available_spot.id,
+                user_id=current_user.id,
+                parking_timestamp=datetime.datetime.utcnow(),
+                parking_cost_per_unit_time=parking_lot.price_per_unit_time
+            )
+            db.session.add(new_reservation)
+            db.session.commit()
+
+            flash(f'Spot {available_spot.spot_number} in {parking_lot.prime_location_name} has been reserved for you!','success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occured during reservation: {e}','danger')
+    else:
+        flash(f'No available spots found in {parking_lot.prime_location_name}. Please try another lot.','warning')
+
+    return redirect(url_for('user_view_parking_lots'))
+    
+
+@app.route('/user/occupy_spot/<int:spot_id>',methods=['POST'])
+@login_required
+def occupy_spot(spot_id):
+    if isinstance(current_user, Admin):
+        flash('Admin cannot occupy spots.','danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    spot=ParkingSpot.query.get_or_404(spot_id)
+
+    if spot.status == 'reserved' and spot.user_id == current_user.id:
+        try:
+            spot.status = 'occupied'
+
+            current_reservation=Reservation.query.filter_by(
+                spot_id=spot.id,
+                user_id=current_user.id,
+                leaving_timestamp=None
+            ).order_by(Reservation.parking_timestamp.desc()).first()
+
+            if current_reservation:
+                current_reservation.parking_timestamp=datetime.datetime.utcnow()
+                db.session.commit()
+                flash(f'Spot {spot.spot_number} in {spot.parking_lot.prime_location_name} is now occupied','success')
+            else:
+                flash('Error: No active reservation found for this spot.','danger')
+                db.session.rollback()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occured while occupying the spot: {e}','danger')
+    elif spot.status == 'occupied' and spot.user_id == current_user.id:
+        flash(f'Spot {spot.spot_number} is already occupied by you.','info')
+    else:
+        flash(f'Spot {spot.spot_number} cannot be occupied. It is not reserved by you or is unavailable.','warning')
+    return redirect(url_for('user_dashboard'))
+
+@app.route('/user/release_spot<int:spot_id>',methods=['POST'])
+@login_required
+def release_spot(spot_id):
+    if isinstance(current_user, Admin):
+        flash('Administrators cannot release spots.','danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    spot = ParkingSpot.query.get_or_404(spot_id)
+
+    if spot.status == 'occupied' and spot.user_id == current_user.id:
+        try:
+            spot.status='available'
+            spot.user_id=None
+
+            current_reservation=Reservation.query.filter_by(
+                spot_id=spot.id,
+                user_id=current_user.id,
+                leaving_timestamp=None
+            ).order_by(Reservation.parking_timestamp.desc()).first()
+
+            if current_reservation:
+                current_reservation.leaving_timestamp=datetime.datetime.utcnow()
+                duration = current_reservation.leaving_timestamp - current_reservation.parking_timestamp
+
+                db.session.commit()
+                flash(f'Spot {spot.spot_number} in {spot.parking_lot.prime_location_name} has been released.','success')
+            else:
+                flash('Error: No active reservation found to release for this spot.','danger')
+                db.session.rollback()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred while releasing the spot: {e}','danger')
+    else:
+        flash(f'Spot {spot.spot_number} cannot be released. It is not occupied by you.','warning')
+    return redirect(url_for('user_dashboard'))
+
+
+@app.route('/user/parking_history')
+@login_required
+def user_parking_history():
+    if isinstance(current_user, Admin):
+        flash('Administrator do not have parking history.','danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    user_reservations = Reservation.query.filter_by(user_id=current_user.id).order_by(Reservation.parking_timestamp.desc()).all()
+
+    history_data = []
+    for res in user_reservations:
+        spot = ParkingSpot.query.get(res.spot_id)
+        lot_name = 'N/A'
+        spot_number = 'N/A'
+        if spot:
+            lot_name=spot.parking_lot.prime_location_name
+            spot_number=spot.spot_number
+
+        duration_str = 'N/A'
+        total_cost = 'N/A'
+
+        if res.leaving_timestamp:
+            duration=res.leaving_timestamp - res.parking_timestamp
+            total_seconds=int(duration.total_seconds())
+            hours=total_seconds//3600
+            minutes=(total_seconds % 3600) // 60
+            seconds=total_seconds % 60
+
+            duration_parts = []
+            if hours > 0:
+                duration_parts.append(f"{hours} hour{'s' if hours > 1 else ''}")
+            if minutes > 0:
+                duration_parts.append(f"{minutes} minute{'s' if minutes > 1 else ''}")
+            if seconds > 0 and not hours and not minutes: 
+                 duration_parts.append(f"{seconds} second{'s' if seconds > 1 else ''}")
+            
+            duration_str = ", ".join(duration_parts) if duration_parts else "Less than a minute"
+            
+            
+            price_per_minute = res.parking_cost_per_unit_time / 60.0
+            total_cost = (duration.total_seconds() / 60.0) * price_per_minute
+            total_cost = f"₹{total_cost:.2f}" 
+
+        history_data.append({
+            'reservation_id': res.id,
+            'lot_name': lot_name,
+            'spot_number': spot_number,
+            'parking_timestamp': res.parking_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'leaving_timestamp': res.leaving_timestamp.strftime('%Y-%m-%d %H:%M:%S') if res.leaving_timestamp else 'Current',
+            'duration': duration_str,
+            'cost_per_unit_time': f"₹{res.parking_cost_per_unit_time:.2f}",
+            'total_cost': total_cost
+        })
+
+    return render_template('user_parking_history.html', history_data=history_data)
+
+
 
 @app.route('/admin_dashboard')
 @login_required

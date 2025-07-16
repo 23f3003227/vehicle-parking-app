@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Available Parking Lots{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">Available Parking Lots</h1>
+    <p>Welcome, {{current_user.fullname}}! Here are the parking lots and their available spots.</p>
+
+    {% if parking_lot_data %}
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Location Name</th>
+                        <th>Address</th>
+                        <th>PIN Code</th>
+                        <th>Price/Unit Time</th>
+                        <th>Total Capacity</th>
+                        <th>Spots Created</th>
+                        <th>Available Spots</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lot in parking_lot_data %}
+                        <tr>
+                            <td>{{lot['lot_id']}}</td>
+                            <td>{{lot['prime_location_name']}}</td>
+                            <td>{{lot['address']}}</td>
+                            <td>{{lot['pin_code']}}</td>
+                            <td>₹{{"%.2f"|format(lot['price_per_unit_time']) }}</td>
+                            <td>{{lot['total_capacity']}}</td>
+                            <td>{{lot['total_spots_created']}}</td>
+                            <td>
+                                {% if lot['available_spots'] > 0 %}
+                                    <span class="badge bg-success">{{lot['available_spots']}} Available</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Full</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if lot['available_spots'] > 0 %}
+                                    <form action="{{ url_for('reserve_spot', lot_id=lot['lot_id']) }}" method="POST" style="display:inline;"  >
+                                        <button type="submit" class="btn btn-sm btn-primary" >Reserve Spot </button>
+                                    </form>
+                                    
+                                {% else %}
+                                    <button class="btn btn-sm btn-secondary" disabled>No Spots</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+
+        </div>
+    {% else %}
+        <p>No parking lots are currently available.</p>
+    {% endif %}
+{% endblock %}

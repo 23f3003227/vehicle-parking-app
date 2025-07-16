@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Your Parking History{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">Your Parking History</h1>
+    <p>Welcome, {{ current_user.fullname }}! Here's a record of your parking sessions.</p> 
+
+    {% if history_data %}
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Reservation ID</th>
+                        <th>Parking Lot</th>
+                        <th>Spot Number</th>
+                        <th>Parked At</th>
+                        <th>Released At</th>
+                        <th>Duration</th>
+                        <th>Price/Unit Time</th>
+                        <th>Total Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in history_data %}
+                        <tr>
+                            <td>{{record['reservation_id']}}</td>
+                            <td>{{record['lot_name']}}</td>
+                            <td>{{record['spot_number']}}</td>
+                            <td>{{record['parking_timestamp']}}</td>
+                            <td>{{record['leaving_timestamp']}}</td>
+                            <td>{{record['duration']}}</td>
+                            <td>{{record['cost_per_unit_time']}}</td>
+                            <td>{{record['total_cost']}}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>You do not have any parking history yet.</p>
+    {% endif %}
+
+    <a href="{{url_for('user_dashboard')}}" class="btn btn-secondary mt-3">Back to Dashboard</a>
+{% endblock %}
