@@ -149,6 +149,7 @@ def register():
                 db.session.add(new_user)
                 db.session.commit()
                 flash('Registration Successfull! Please log in.','success')
+                return redirect(url_for('login'))
             except Exception as e:
                 db.session.rollback()
                 flash(f'An error occured during registration. Please try again. ({e})','danger')
@@ -192,6 +193,7 @@ def login():
         else:
             flash('Login Failed. Check email or password','danger')
             return render_template('login.html',email=email )
+        
     return render_template('login.html')
 
 @app.route('/logout')
@@ -410,6 +412,75 @@ def user_parking_history():
         })
 
     return render_template('user_parking_history.html', history_data=history_data)
+
+
+@app.route('/admin/all_reservations')
+@login_required
+def admin_all_reservations():
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('user_dashboard'))
+    
+    all_reservations = Reservation.query.order_by(Reservation.parking_timestamp.desc()).all()
+
+    all_reservations_data = []
+    for res in all_reservations:
+        spot = ParkingSpot.query.get(res.spot_id)
+        user = User.query.get(res.user_id)
+
+        lot_name = 'N/A'
+        spot_number = 'N/A'
+        user_email = 'N/A'
+
+        if spot:
+            lot_name = spot.parking_lot.prime_location_name
+            spot_number = spot.spot_number
+
+        if user:
+            user_email = user.email_id
+
+        duration_str = 'N/A'
+        total_cost = 'N/A'
+
+        if res.leaving_timestamp:
+            duration = res.leaving_timestamp - res.parking_timestamp  
+            total_seconds = int(duration.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+
+            duration_parts = []
+
+            if hours > 0:
+                duration_parts.append(f"{hours} hour{'s' if hours > 1 else ''}")
+            if minutes > 0:
+                duration_parts.append(f"{minutes} minute{'s' if minutes > 1 else ''}")
+            if seconds > 0 and not hours and not minutes: 
+                 duration_parts.append(f"{seconds} second{'s' if seconds > 1 else ''}")
+            elif seconds > 0 and (hours > 0 or minutes > 0): # Added this to ensure seconds are shown if hours/minutes are present
+                 duration_parts.append(f"{seconds} second{'s' if seconds > 1 else ''}")
+             
+
+            duration_str = ", ".join(duration_parts) if duration_parts else "Less than a minute."  
+
+            price_per_minute = res.parking_cost_per_unit_time / 60.0
+            total_cost = (duration.total_seconds() / 60.0) * price_per_minute
+            total_cost = f"₹{total_cost:.2f}"
+        
+        all_reservations_data.append({
+            'reservation_id': res.id,
+            'user_email': user_email,
+            'lot_name': lot_name,
+            'spot_number': spot_number,
+            'parking_timestamp': res.parking_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'leaving_timestamp': res.leaving_timestamp.strftime('%Y-%m-%d %H:%M:%S') if res.leaving_timestamp else 'Current',
+            'duration': duration_str,
+            'cost_per_unit_time': f"₹{res.parking_cost_per_unit_time:.2f}",
+            'total_cost': total_cost
+        })
+    
+    return render_template('admin_all_reservations.html', all_reservations_data=all_reservations_data)
+    
 
 
 
