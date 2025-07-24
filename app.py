@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy # Database ORM for Flask.
 from flask_login import LoginManager, UserMixin, login_user, current_user, logout_user, login_required # Handles user session management and authentication.
 from werkzeug.security import generate_password_hash, check_password_hash # For secure password hashing
 import os # Provides functions for interacting with the operating system.
-import datetime
+from datetime import datetime, timezone
 
 app = Flask(__name__) # Initializes the Flask web application.
 
@@ -108,7 +108,7 @@ class Reservation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     spot_id = db.Column(db.Integer, db.ForeignKey('parking_spot.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    parking_timestamp = db.Column(db.DateTime,nullable=False, default=datetime.datetime.utcnow)
+    parking_timestamp = db.Column(db.DateTime,nullable=False, default=lambda: datetime.now(timezone.utc))
     leaving_timestamp = db.Column(db.DateTime, nullable=True)
     parking_cost_per_unit_time = db.Column(db.Float, nullable=False)
 
@@ -269,7 +269,7 @@ def reserve_spot(lot_id):
             new_reservation = Reservation(
                 spot_id=available_spot.id,
                 user_id=current_user.id,
-                parking_timestamp=datetime.datetime.utcnow(),
+                parking_timestamp=datetime.now(timezone.utc),
                 parking_cost_per_unit_time=parking_lot.price_per_unit_time
             )
             db.session.add(new_reservation)
@@ -305,7 +305,7 @@ def occupy_spot(spot_id):
             ).order_by(Reservation.parking_timestamp.desc()).first()
 
             if current_reservation:
-                current_reservation.parking_timestamp=datetime.datetime.utcnow()
+                current_reservation.parking_timestamp=datetime.now(timezone.utc)
                 db.session.commit()
                 flash(f'Spot {spot.spot_number} in {spot.parking_lot.prime_location_name} is now occupied','success')
             else:
@@ -341,8 +341,8 @@ def release_spot(spot_id):
             ).order_by(Reservation.parking_timestamp.desc()).first()
 
             if current_reservation:
-                current_reservation.leaving_timestamp=datetime.datetime.utcnow()
-                duration = current_reservation.leaving_timestamp - current_reservation.parking_timestamp
+                current_reservation.leaving_timestamp=datetime.now(timezone.utc)
+                # duration = current_reservation.leaving_timestamp - current_reservation.parking_timestamp
 
                 db.session.commit()
                 flash(f'Spot {spot.spot_number} in {spot.parking_lot.prime_location_name} has been released.','success')
@@ -482,6 +482,18 @@ def admin_all_reservations():
     return render_template('admin_all_reservations.html', all_reservations_data=all_reservations_data)
     
 
+@app.route('/admin/users')
+@login_required
+def admin_view_users():
+    # Ensure only administrators can access this page
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('user_dashboard'))
+    
+    # Fetch all User records from the database
+    all_users = User.query.order_by(User.id.asc()).all()
+
+    return render_template('admin_view_users.html', all_users_data=all_users)
 
 
 @app.route('/admin_dashboard')
@@ -648,20 +660,25 @@ def view_parking_spot(lot_id):
 
     spots_data = []
     for spot in parking_spots:
-        user_email='N/A'
+        user_email = "N/A"
+        
         if spot.user_id:
             if spot.occupied_by_user:
                 user_email = spot.occupied_by_user.email_id
             else:
-                user_email = 'User not found'
+                user_email = "User not found"
 
         spots_data.append({
-            'spot_id':spot.id,
-            'spot_number':spot.spot_number,
-            'status':spot.status,
-            'occupied_by':user_email
+            'spot_id': spot.id,
+            'spot_number': spot.spot_number,
+            'status': spot.status,
+            'occupied_by': user_email,
         })
-    return render_template('view_parking_spot.html',parking_lot=parking_lot,spots_data=spots_data)
+
+    return render_template('view_parking_spot.html',
+                           parking_lot=parking_lot, 
+                           spots_data=spots_data)
+
 
 
 # Database intialisation & admin seeding/ creation.

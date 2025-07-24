@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}All Registered Users{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">All Registered Users</h1>
+    <p>Overview of all user accounts registered in the system.</p>
+
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mb-3">Back to Admin Dashboard</a>
+
+    {% if all_users_data %}
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>User ID</th>
+                        <th>Email</th>
+                        <th>Full Name</th>
+                        <th>Address</th>
+                        <th>PIN Code</th>
+                        <th>Reservations Count</th> {# Changed from 'Registrations' for clarity #}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in all_users_data %}
+                        <tr>
+                            <td>{{ user.id }}</td>
+                            <td>{{ user.email_id }}</td>
+                            <td>{{ user.fullname }}</td>
+                            <td>{{ user.address }}</td>
+                            <td>{{ user.pin_code }}</td>
+                            <td>{{ user.reservations|length }}</td> {# Display count of reservations #}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No registered users found yet.</p>
+    {% endif %}
+
+{% endblock %}

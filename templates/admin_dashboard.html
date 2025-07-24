@@ -6,8 +6,15 @@
     <h1 class="mb-4">Admin Dashboard</h1>
     <p>Welcome, {{ current_user.fullname }}! Ready to manage parking lots and spots.</p>
 
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <a href="{{ url_for('create_parking_lot') }}" class="btn btn-primary me-2">Create New Parking Lot</a>
+            <a href="{{ url_for('admin_all_reservations') }}" class="btn btn-info me-2">View All Reservations</a>
+            <a href="{{ url_for('admin_view_users') }}" class="btn btn-info">View All Users</a> 
+        </div>
+    </div>
+
     <h2 class="mt-5 mb-3">Parking Lots Summary</h2>
-    <a href="{{ url_for('create_parking_lot')}}" class="btn btn-primary mb-3">Create New Parking Lot</a>
 
     {% if lot_summaries %}
         <div class="table-responsive">
@@ -16,6 +23,9 @@
                     <tr>
                         <th>ID</th>
                         <th>Location Name</th>
+                        <th>Address</th>
+                        <th>PIN</th>
+                        <th>Price/Unit Time</th>
                         <th>Max Capacity</th>
                         <th>Spots Created</th>
                         <th>Available</th>
@@ -29,6 +39,9 @@
                         <tr>
                             <td>{{ lot['lot_id'] }}</td>
                             <td>{{ lot['prime_location_name'] }}</td>
+                            <td>{{ lot.address }}</td>
+                            <td>{{ lot.pin_code }}</td>
+                            <td>₹{{ "%.2f"|format(lot.price_per_unit_time) }}</td>
                             <td>{{ lot['maximum_number_of_spots'] }}</td>
                             <td>{{ lot['total_spots_created'] }}</td>
                             <td>{{ lot['available_spots'] }}</td>
