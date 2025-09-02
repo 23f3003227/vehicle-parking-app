@@ -23,7 +23,7 @@
                             <form action="{{url_for('occupy_spot',spot_id=current_spot.id)}}" method="POST" style="display:inline;">
                                 <button type='submit' class="btn btn-success me-2">Occupy Spot</button>
                             </form>
-                            <button class="btn btn-secondary" disabled>Cancel Reservation</button>
+                            
                         {% elif current_spot.status=='occupied' %}
                             <p>You are currently occupying spot <strong>{{current_spot.spot_number}}</strong> in <strong>{{current_spot.parking_lot.prime_location_name}}</strong>.</p>
                             <p>Status: <span class="badge bg-danger">Occupied</span></p>
