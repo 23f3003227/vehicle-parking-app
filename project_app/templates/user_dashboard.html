@@ -20,14 +20,14 @@
                             <p>You have reserved spot <strong>{{current_spot.spot_number}}</strong> in <strong>{{current_spot.parking_lot.prime_location_name}}</strong>.</p>
                             <p>Status: <span class="badge bg-warning text-dark">Reserved</span></p>
                             <p>Ready to park?</p>
-                            <form action="{{url_for('occupy_spot',spot_id=current_spot.id)}}" method="POST" style="display:inline;">
+                            <form action="{{url_for('main.occupy_spot',spot_id=current_spot.id)}}" method="POST" style="display:inline;">
                                 <button type='submit' class="btn btn-success me-2">Occupy Spot</button>
                             </form>
                             
                         {% elif current_spot.status=='occupied' %}
                             <p>You are currently occupying spot <strong>{{current_spot.spot_number}}</strong> in <strong>{{current_spot.parking_lot.prime_location_name}}</strong>.</p>
                             <p>Status: <span class="badge bg-danger">Occupied</span></p>
-                            <form action="{{ url_for('release_spot', spot_id=current_spot.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to release spot {{ current_spot.spot_number }}?');">
+                            <form action="{{ url_for('main.release_spot', spot_id=current_spot.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to release spot {{ current_spot.spot_number }}?');">
                                 <button type="submit" class="btn btn-danger">Release Spot</button>
                             </form>
                         {% else %}
@@ -35,7 +35,7 @@
                         {% endif %}
                     {% else %}
                             <p>You do not currently have any reserved or occupied parking spots.</p>
-                            <a href="{{url_for('user_view_parking_lots')}}" class="btn btn-info">Find Available Parking</a>
+                            <a href="{{url_for('main.user_view_parking_lots')}}" class="btn btn-info">Find Available Parking</a>
                     {% endif %}
                 </div>
             </div>
@@ -48,13 +48,13 @@
                 <div class="card-body">
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item">
-                            <a href="{{url_for('user_view_parking_lots')}}" class="btn btn-link">View Available Parking Lots</a>
+                            <a href="{{url_for('main.user_view_parking_lots')}}" class="btn btn-link">View Available Parking Lots</a>
                         </li>
                         <li class="list-group-item">
-                            <a href="{{url_for('user_parking_history')}}" class="btn btn-link">View Parking History</a>
+                            <a href="{{url_for('main.user_parking_history')}}" class="btn btn-link">View Parking History</a>
                         </li>
                         <li class="list-group-item">
-                            <a href="{{url_for('logout')}}" class="btn btn-link text-danger">Logout</a>
+                            <a href="{{url_for('main.logout')}}" class="btn btn-link text-danger">Logout</a>
                         </li>
                     </ul>
                 </div>

@@ -6,7 +6,7 @@
     <h1 class="mb-4">Parking Spots for {{ parking_lot.prime_location_name }} (ID: {{ parking_lot.id }})</h1>
     <p>Total Capacity: {{ parking_lot.maximum_number_of_spots }}</p>
 
-    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mb-3">Back to Admin Dashboard</a>
+    <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-secondary mb-3">Back to Admin Dashboard</a>
 
     {% if spots_data %}
         <div class="table-responsive">

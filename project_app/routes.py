@@ -421,24 +421,151 @@ def admin_dashboard():
     
     return render_template('admin_dashboard.html',lot_summaries=lot_summaries)
 
-@main.route('/user_dashboard')
+@main.route('/admin/parking_lot/create', methods = ['GET','POST'])
 @login_required
-def user_dashboard():
-    if isinstance(current_user,Admin):
-        flash('Admin cannot access user dashboard directly','danger')
-        return redirect(url_for('main.admin_dashboard'))
+def create_parking_lot():
+    if not isinstance(current_user, Admin):
+        flash('You must be administrator to access this page.','danger')
+        return redirect(url_for('main.user_dashboard'))
     
-    current_spot = ParkingSpot.query.filter(
-        (ParkingSpot.user_id == current_user.id) &
-        ((ParkingSpot.status == 'occupied') | (ParkingSpot.status == 'reserved'))
-    ).first()
+    if request.method == 'POST':
 
-    current_reservation = None
-    if current_spot:
-        current_reservation = Reservation.query.filter_by(
-            user_id=current_user.id,
-            spot_id=current_spot.id,
-            leaving_timestamp=None
-        ).order_by(Reservation.parking_timestamp.desc()).first()
+        prime_location = request.form['prime_location_name']
+        price = float(request.form['price_per_unit_time'])
+        address = request.form['address']
+        pin_code = request.form['pin_code']
+        maximum_no_of_spots = int(request.form['maximum_number_of_spots'])
 
-    return render_template('user_dashboard.html', current_spot=current_spot, current_reservation=current_reservation)
+        try: 
+
+            existing_lot = ParkingLot.query.filter_by(prime_location_name=prime_location).first()
+
+            if existing_lot:
+                flash('A parking lot with this location name already exists.','warning')
+
+                return render_template('create_parking_lot.html',
+                 prime_location_name=prime_location,
+                 price_per_unit_time=price,
+                 address=address,
+                 pin_code=pin_code,
+                 maximum_number_of_spots=maximum_no_of_spots)
+            
+            parking_lot = ParkingLot(prime_location_name=prime_location,price_per_unit_time=price,address=address,pin_code=pin_code,maximum_number_of_spots=maximum_no_of_spots)
+            db.session.add(parking_lot)
+            db.session.commit()
+
+            #Creating Spots
+            for i in range(1,maximum_no_of_spots+1):
+                spot = ParkingSpot(lot_id=parking_lot.id,spot_number=i,status='available')
+                db.session.add(spot)
+            db.session.commit()
+            flash('Parking lot created successfully!', 'success')
+            return redirect(url_for('main.admin_dashboard'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An Error occured : {e}','danger')
+            return render_template('create_parking_lot.html',
+                 prime_location_name=prime_location,
+                 price_per_unit_time=price,
+                 address=address,
+                 pin_code=pin_code,
+                 maximum_number_of_spots=maximum_no_of_spots)
+    return render_template('create_parking_lot.html')
+
+@main.route('/admin/parking_lot/edit/<int:lot_id>', methods=['GET','POST'])
+@login_required
+def edit_parking_lot(lot_id):
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('main.user_dashboard'))
+    
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+
+    if request.method == 'POST':
+        try:
+            original_max_spots = parking_lot.maximum_number_of_spots
+
+            parking_lot.prime_location_name = request.form['prime_location_name']
+            parking_lot.price_per_unit_time = float(request.form['price_per_unit_time'])
+            parking_lot.address = request.form['address']
+            parking_lot.pin_code = request.form['pin_code']
+            parking_lot.maximum_number_of_spots = int(request.form['maximum_number_of_spots'])
+
+            db.session.commit()
+
+            new_max_spots = parking_lot.maximum_number_of_spots
+            if new_max_spots > original_max_spots:
+                for i in range(original_max_spots + 1, new_max_spots + 1):
+                    spot = ParkingSpot(lot_id=parking_lot.id, spot_number=i, status='available')
+                    db.session.add(spot)
+                flash(f'Added {new_max_spots - original_max_spots} new parking spots','info')
+            elif new_max_spots < original_max_spots:
+                spots_to_delete = ParkingSpot.query.filter_by(lot_id=parking_lot.id).filter(ParkingSpot.spot_number>new_max_spots).all()
+
+                for spot in spots_to_delete:
+                    if spot.status in ['occupied','reserved']:
+                        flash(f'Warning: Spot {spot.spot_number} was {spot.status} and will be deleted. Ensure no active reservations/occupancies on deleted spots.','warning')
+                    db.session.delete(spot)
+                flash(f'Removed {original_max_spots - new_max_spots} parking spots.','info')
+            
+            db.session.commit()
+
+            flash('Parking lot updated successfully!','success')
+            return redirect(url_for('main.admin_dashboard'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred during parking lot update: {e}','danger')
+    return render_template('edit_parking_lot.html',parking_lot=parking_lot)
+
+@main.route('/admin/parking_lot/delete/<int:lot_id>', methods=['POST'])
+@login_required
+def delete_parking_lot(lot_id):
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('main.user_dashboard'))
+    
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+
+    try:
+        db.session.delete(parking_lot)
+        db.session.commit()
+        flash(f'Parking lot "{parking_lot.prime_location_name}" and all its spots and reservations have been deleted successfully','success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'An error occured during parking lot deletion: {e}','danger')
+
+    # Ensure a redirect happens even if an exception occurs
+    return redirect(url_for('main.admin_dashboard'))
+
+@main.route('/admin/parking_lot/<int:lot_id>/spot')
+@login_required
+def view_parking_spot(lot_id):
+    if not isinstance(current_user, Admin):
+        flash('You must be an administrator to access this page.','danger')
+        return redirect(url_for('main.user_dashboard'))
+
+    parking_lot = ParkingLot.query.get_or_404(lot_id)
+    parking_spots = ParkingSpot.query.filter_by(lot_id=lot_id).order_by(ParkingSpot.spot_number.asc()).all()
+
+    spots_data = []
+    for spot in parking_spots:
+        user_email = "N/A"
+        
+        if spot.user_id:
+            if spot.occupied_by_user:
+                user_email = spot.occupied_by_user.email_id
+            else:
+                user_email = "User not found"
+
+        spots_data.append({
+            'spot_id': spot.id,
+            'spot_number': spot.spot_number,
+            'status': spot.status,
+            'occupied_by': user_email,
+        })
+
+    return render_template('view_parking_spot.html',
+                           parking_lot=parking_lot, 
+                           spots_data=spots_data)
+
+# --- Database Initialization and Admin Seeding ---
